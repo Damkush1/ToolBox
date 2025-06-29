@@ -319,7 +319,7 @@
     
     <footer class="mt-12 py-8">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-500">
-            <p class="text-sm">Developed by Dor Bahat with Gemini 2.5 Pro, Q2 2025.</p>
+            <p class="text-sm">Developed by Dor Bahat with Gemini 1.5 Pro, Q2 2025.</p>
             <p class="text-sm">For any ideas or direct feedback, please reach out at&nbsp;<a href="mailto:dor.b@taboola.com" class="text-taboola-blue hover:underline">dor.b@taboola.com</a></p>
         </div>
     </footer>
@@ -348,7 +348,7 @@
 
         function updateActiveLinkOnScroll() {
             const headerHeight = mainHeader.offsetHeight;
-            let currentSectionId = sections[0].id;
+            let currentSectionId = sections[0].id; 
             
             for (let i = sections.length - 1; i >= 0; i--) {
                 const section = sections[i];
@@ -679,12 +679,12 @@
                 const domain = new URL(url).hostname;
                 const fileName = adsTxtCrawler.appAdsToggle.checked ? 'app-ads.txt' : 'ads.txt';
                 const adsTxtUrl = `https://${domain}/${fileName}`;
-                const proxyUrl = `https://cors-anywhere.herokuapp.com/${adsTxtUrl}`;
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(adsTxtUrl)}`;
                 
                 adsTxtCrawler.resultTitle.textContent = `Validating ${fileName} for: ${domain}`;
                 adsTxtCrawler.sourceLink.href = adsTxtUrl;
 
-                const response = await fetch(proxyUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const response = await fetch(proxyUrl);
                 if (response.ok) {
                     adsTxtCrawler.rawAdsTxtContent = await response.text();
                     parseAndDisplayAdsTxt(adsTxtCrawler.rawAdsTxtContent);
