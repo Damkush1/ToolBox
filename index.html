@@ -129,19 +129,35 @@
             100% { transform: translateY(0px); }
         }
 
-        /* Learning Space Video */
+        /* Learning Space & Video Player Styles */
         .aspect-video {
             position: relative;
             width: 100%;
             padding-top: 56.25%; /* 16:9 Aspect Ratio */
         }
-        .aspect-video iframe {
+        .aspect-video iframe, .aspect-video video {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             border: 0;
+        }
+        .play-button-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 160px; /* Increased size */
+            height: 160px; /* Increased size */
+            cursor: pointer;
+            transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+            opacity: 0.9;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4)); /* Added shadow */
+        }
+        .play-button-overlay:hover {
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 1;
         }
     </style>
 </head>
@@ -698,48 +714,87 @@
 
         function playVideoAd(input) {
             jsonBourne.output.innerHTML = '';
-            let videoUrl = null, parsedJson = null;
-            const findFirstMp4Url = (urls) => (Array.isArray(urls) && urls.length > 0) ? urls.find(url => typeof url === 'string' && url.toLowerCase().endsWith('.mp4')) || null : null;
+            let videoUrl = null;
+            let parsedJson = null;
+
             try {
                 parsedJson = JSON.parse(input);
-                videoUrl = findFirstMp4Url(parsedJson['jsVpaidVideoUrl.videoUrl']) || findFirstMp4Url(parsedJson['vastMediaFiles.urls']);
-            } catch (e) { console.warn("Not valid JSON. Will try regex.", e); }
-            if (!videoUrl) {
-                const matches = input.match(/(https?:\/\/[^\s"'`<>]*\.mp4)/g);
-                if (matches && matches.length > 0) videoUrl = matches[0];
+            } catch (e) {
+                console.warn("Input is not valid JSON. Will try regex matching on the raw string.");
             }
+
+            // 1. Prioritized search in parsed JSON
+            if (parsedJson) {
+                if (Array.isArray(parsedJson['vastMediaFiles.urls']) && parsedJson['vastMediaFiles.urls'].length > 0) {
+                    videoUrl = parsedJson['vastMediaFiles.urls'].find(url => typeof url === 'string' && url.toLowerCase().endsWith('.mp4'));
+                }
+                if (!videoUrl && parsedJson['mediaUrl.url']) {
+                     videoUrl = parsedJson['mediaUrl.url'];
+                }
+                if (!videoUrl && Array.isArray(parsedJson['jsVpaidVideoUrl.videoUrl']) && parsedJson['jsVpaidVideoUrl.videoUrl'].length > 0) {
+                    videoUrl = parsedJson['jsVpaidVideoUrl.videoUrl'].find(url => typeof url === 'string' && url.toLowerCase().endsWith('.mp4'));
+                }
+            }
+
+            // 2. Fallback to regex on the raw input string
             if (!videoUrl) {
-                const pattern = '"video/mp4\\",\\"uri\\":\\"';
-                const p_start = input.indexOf(pattern);
-                if (p_start !== -1) {
-                    const url_start = p_start + pattern.length;
-                    const url_end = input.indexOf('"', url_start);
-                    if (url_end !== -1) {
-                        let potentialUrl = input.substring(url_start, url_end);
-                        if (input.charAt(url_end - 1) === '\\') {
-                            const new_end = input.indexOf('\\"', url_start);
-                            if(new_end !== -1) potentialUrl = input.substring(url_start, new_end);
-                        }
-                        videoUrl = potentialUrl;
+                const vastMediaFileRegex = /<MediaFile[^>]+type="video\/mp4"[^>]*>\s*<!\[CDATA\[(.*?)\]\]>/;
+                const vastMatch = input.match(vastMediaFileRegex);
+                if (vastMatch && vastMatch[1]) {
+                    videoUrl = vastMatch[1].trim();
+                } else {
+                    const genericMp4Regex = /(https?:\/\/[^\s"'`<>]*\.mp4)/;
+                    const genericMatch = input.match(genericMp4Regex);
+                    if (genericMatch && genericMatch[1]) {
+                        videoUrl = genericMatch[1];
                     }
                 }
             }
+
             if (videoUrl) {
                 const cleanedUrl = videoUrl.replace(/\\\//g, '/');
                 const videoWrapper = document.createElement('div');
                 videoWrapper.className = 'flex justify-center';
                 const videoContainer = document.createElement('div');
-                videoContainer.className = 'aspect-video bg-black rounded-lg overflow-hidden shadow-lg w-full max-w-2xl';
+                videoContainer.className = 'relative aspect-video bg-black rounded-lg overflow-hidden shadow-lg w-full max-w-2xl';
                 const videoElement = document.createElement('video');
+                
                 videoElement.src = cleanedUrl;
-                videoElement.controls = videoElement.autoplay = videoElement.muted = videoElement.loop = true;
+                videoElement.controls = false; // Controls hidden initially
+                videoElement.loop = true;
+                videoElement.playsInline = true; 
                 videoElement.className = 'w-full h-full';
-                videoElement.onerror = () => { jsonBourne.output.innerHTML = `<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert"><p class="font-bold">Loading Error</p><p>Could not load video.</p></div>`; };
+
+                const playButton = document.createElement('img');
+                playButton.src = 'https://i.ibb.co/nMYv3FFQ/TBLAPLAY.png';
+                playButton.alt = 'Play Video';
+                playButton.className = 'play-button-overlay';
+                
+                videoElement.onerror = () => { 
+                    jsonBourne.output.innerHTML = `<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md" role="alert"><p class="font-bold">Loading Error</p><p>Could not load video from the provided URL.</p></div>`; 
+                };
+
+                playButton.addEventListener('click', () => {
+                    videoElement.play();
+                });
+
+                videoElement.addEventListener('pause', () => {
+                    playButton.style.display = 'block';
+                    videoElement.controls = false;
+                });
+
+                videoElement.addEventListener('play', () => {
+                    playButton.style.display = 'none';
+                    videoElement.controls = true;
+                });
+                
                 videoContainer.appendChild(videoElement);
+                videoContainer.appendChild(playButton);
                 videoWrapper.appendChild(videoContainer);
                 jsonBourne.output.appendChild(videoWrapper);
+
             } else {
-                jsonBourne.output.innerHTML = `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md" role="alert"><p class="font-bold">Not Found</p><p>No valid MP4 video URL found.</p></div>`;
+                jsonBourne.output.innerHTML = `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-md" role="alert"><p class="font-bold">Not Found</p><p>No valid MP4 video URL could be extracted from the input.</p></div>`;
             }
         }
         jsonBourne.jsonInput.addEventListener('input', debounce(processJsonInput, 500));
